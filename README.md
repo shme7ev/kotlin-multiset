@@ -5,6 +5,8 @@ A Kotlin library for working with multisets (bags) that allows comparing complex
 1. [PropertyBasedMultiSet] - A basic multiset implementation that compares elements based on specified properties
 2. [NestedPropertyMultiSet] - An advanced multiset that can handle nested multisets in properties
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shme7ev/kotlin-multiset)
+
 ## Features
 
 - Compare complex objects based on selected properties
@@ -39,7 +41,8 @@ val difference = multiSet1.difference(multiSet2)
 ### Nested Property Multiset
 
 ```kotlin 
-data class Address(val street: String, val city: String) data class Person(val name: String, val age: Int, val address: Address)
+data class Address(val street: String, val city: String) 
+data class Person(val name: String, val age: Int, val address: Address)
 val address1 = Address("123 Main St", "Springfield") 
 val address2 = Address("123 Main St", "Springfield") 
 val person1 = Person("Alice", 25, address1) 

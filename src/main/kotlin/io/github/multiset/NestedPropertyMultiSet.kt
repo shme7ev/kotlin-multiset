@@ -45,8 +45,8 @@ class NestedPropertyMultiSet<T : Any>(
     fun elementsEquals(other: NestedPropertyMultiSet<*>): Boolean {
         if (this.elements.size != other.elements.size) return false
 
-        val otherGroups = other.elementGroups()
-        val thisGroups = elementGroups()
+        val otherGroups = other.copyElementGroups()
+        val thisGroups = copyElementGroups()
 
         if (thisGroups.size != otherGroups.size) return false
 

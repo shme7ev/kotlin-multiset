@@ -7,23 +7,28 @@ open class PropertyBasedMultiSet<T : Any>(
     val elements: List<T>,
     protected val properties: List<KProperty1<T, *>>,
 ) {
-    private val elementGroups: Map<Int, MutableList<T>> by lazy {
-        elements.groupByTo(mutableMapOf(), ::hash).mapValues { it.value.toMutableList() }
-    }
 
-    protected fun elementGroups(): Map<Int, MutableList<T>> = elementGroups
+    private val elementGroups by lazy { elements.groupBy { hash(it) } }
 
-    private val propertyNames = properties.map { it.name }
+    private val propertyNames by lazy { properties.map { it.name } }
 
     protected open fun equality(a: T, b: T): Boolean =
-        properties.all { prop ->
-            val aValue = prop.get(a)
-            val bValue = prop.get(b)
-            when {
-                aValue is BigDecimal && bValue is BigDecimal -> aValue.compareTo(bValue) == 0
-                else -> aValue == bValue
+        properties.all { prop -> propertyCompare(prop.get(a), prop.get(b)) }
+
+    private fun propertyCompare(aValue: Any?, bValue: Any?) = when {
+        aValue is BigDecimal && bValue is BigDecimal -> aValue.compareTo(bValue) == 0
+        else -> aValue == bValue
+    }
+
+    private fun ((String) -> Unit).logDifferences(element: T, otherElement: T) {
+        properties
+            .filter { prop -> !propertyCompare(prop.get(element), prop.get(otherElement)) }
+            .joinToString(", ") { prop ->
+                "${prop.name}: ${prop.get(element)} != ${prop.get(otherElement)}"
+            }.takeIf { it.isNotEmpty() }?.let {
+                this("No match for $element in other multiset, differences with $otherElement: $it")
             }
-        }
+    }
 
     protected open fun hash(element: T): Int =
         properties.fold(0) { acc, prop ->
@@ -40,15 +45,21 @@ open class PropertyBasedMultiSet<T : Any>(
         }
 
         val result = mutableListOf<T>()
-        val otherCopy = other.copyElementGroups()
 
         elementGroups.forEach { (hash, group) ->
-            otherCopy[hash]?.let { otherGroup ->
-                group.forEach { element ->
-                    val matchingIndex = otherGroup.indexOfFirst { equality(element, it) }
-                    if (matchingIndex >= 0) {
-                        result.add(element)
-                        otherGroup.removeAt(matchingIndex)
+            other.elementGroups[hash]?.let { otherGroup ->
+                when {
+                    group.size == 1 && otherGroup.size == 1 -> result.add(group.first())
+                    else -> {
+                        // Hash collision - need equality check
+                        group.forEach { element ->
+                            val copyOtherGroup = otherGroup.toMutableList()
+                            val matchingIndex = copyOtherGroup.indexOfFirst { equality(element, it) }
+                            if (matchingIndex >= 0) {
+                                result.add(element)
+                                copyOtherGroup.removeAt(matchingIndex)
+                            }
+                        }
                     }
                 }
             }
@@ -57,61 +68,44 @@ open class PropertyBasedMultiSet<T : Any>(
         return result
     }
 
-    fun difference(other: PropertyBasedMultiSet<T>): List<T> {
+    fun difference(other: PropertyBasedMultiSet<T>, logger: ((String) -> Unit)? = null): List<T> {
+        elements
         require(this.propertyNames == other.propertyNames) {
             "Can only calculate difference between MultiSets with the same property comparisons"
         }
 
-        val otherCopy = other.copyElementGroups()
         val resultElements = mutableListOf<T>()
 
-        elementGroups.forEach { (hash, group) ->
-            val remainingOtherGroup = otherCopy[hash] ?: mutableListOf()
-
-            group.forEach { element ->
-                val matchingIndex = remainingOtherGroup.indexOfFirst { equality(element, it) }
-                if (matchingIndex == -1) {
-                    resultElements.add(element)
-                } else {
-                    remainingOtherGroup.removeAt(matchingIndex)
-                }
-            }
-        }
-
-        return resultElements
-    }
-
-
-    // can be used for debugging
-    fun differenceWithLogging(other: PropertyBasedMultiSet<T>, logger: (String) -> Unit): List<T> {
-        require(this.propertyNames == other.propertyNames) {
-            "Can only calculate difference between MultiSets with the same property comparisons"
-        }
-
-        val otherCopy = other.copyElementGroups()
-        val resultElements = mutableListOf<T>()
-
-        elementGroups.forEach { (hash, group) ->
-            val remainingOtherGroup = otherCopy[hash] ?: mutableListOf()
-
-            group.forEach { element ->
-                val matchingIndex = remainingOtherGroup.indexOfFirst { equality(element, it) }
-                if (matchingIndex == -1) {
-                    // Log differences for each element in other
-                    other.elements.forEach { otherElement ->
-                        val differences = properties
-                            // TODO needs to be adjusted for reference types and BigDecimals
-                            .filter { prop -> prop.get(element) != prop.get(otherElement) }
-                            .joinToString(", ") { prop ->
-                                "${prop.name}: ${prop.get(element)} != ${prop.get(otherElement)}"
-                            }
-                        if (differences.isNotEmpty()) {
-                            logger("No match for $element in other multiset, differences with $otherElement: $differences")
+        elementGroups.forEach { (hash, hashGroup) ->
+            val otherHashGroup = other.elementGroups[hash]
+            if (otherHashGroup == null) {
+                resultElements.addAll(hashGroup)
+                logger?.run {
+                    hashGroup.forEach { element ->
+                        other.elements.forEach { otherElement ->
+                            logDifferences(element, otherElement)
                         }
                     }
-                    resultElements.add(element)
+                }
+            } else {
+                if (hashGroup.size == 1 && otherHashGroup.size == 1) {
+                    // hash match, skip since no difference
                 } else {
-                    remainingOtherGroup.removeAt(matchingIndex)
+                    // hash collision
+                    val copyOtherHashGroup = otherHashGroup.toMutableList()
+                    hashGroup.forEach { element ->
+                        val matchingIndex = copyOtherHashGroup.indexOfFirst { equality(element, it) }
+                        if (matchingIndex == -1) {
+                            resultElements.add(element)
+                            logger?.run {
+                                copyOtherHashGroup.forEachIndexed { index, otherElement ->
+                                    if (index != matchingIndex) logDifferences(element, otherElement)
+                                }
+                            }
+                        } else {
+                            copyOtherHashGroup.removeAt(matchingIndex)
+                        }
+                    }
                 }
             }
         }
@@ -128,11 +122,13 @@ open class PropertyBasedMultiSet<T : Any>(
         val otherCopy = other.copyElementGroups()
 
         elementGroups.forEach { (hash, group) ->
-            val otherGroup = otherCopy[hash] ?: mutableListOf()
-            group.forEach { element ->
-                val matches = otherGroup.filter { equality(element, it) }
-                if (matches.isNotEmpty()) {
-                    result[element] = matches
+            otherCopy[hash]?.let { otherGroup ->
+                if (group.size == 1 && otherGroup.size == 1) result[group.first()] = otherGroup
+                else {
+                    // hash collision, have to compare by equality
+                    group.forEach { element ->
+                        result[element] = otherGroup.filter { equality(element, it) }
+                    }
                 }
             }
         }
@@ -140,48 +136,60 @@ open class PropertyBasedMultiSet<T : Any>(
         return result
     }
 
-    fun symmetricDifference(other: PropertyBasedMultiSet<T>): Pair<Set<T>, Set<T>> {
+    fun symmetricDifference(other: PropertyBasedMultiSet<T>): Pair<List<T>, List<T>> {
         require(this.propertyNames == other.propertyNames) {
             "Can only calculate symmetric difference between MultiSets with the same property comparisons"
         }
 
-        val firstOnly = mutableSetOf<T>()
-        val secondOnly = mutableSetOf<T>()
-        val thisCopy = copyElementGroups()
-        val otherCopy = other.copyElementGroups()
+        val firstOnly = mutableListOf<T>()
+        val secondOnly = mutableListOf<T>()
 
         // Collect all unique hash codes from both multisets
-        val allHashes = (thisCopy.keys + otherCopy.keys).toSet()
+        val allHashes = (elementGroups.keys + other.elementGroups.keys).toSet()
 
         allHashes.forEach { hash ->
-            val thisGroup = thisCopy[hash] ?: mutableListOf()
-            val otherGroup = otherCopy[hash] ?: mutableListOf()
+            val thisGroup = elementGroups[hash] ?: listOf()
+            val otherGroup = other.elementGroups[hash] ?: listOf()
 
-            val thisGroupCopy = thisGroup.toMutableList()
-            thisGroupCopy.forEach { thisElement ->
-                val matchingIndex = otherGroup.indexOfFirst { equality(thisElement, it) }
-                if (matchingIndex == -1) {
-                    firstOnly.add(thisElement)
-                } else {
-                    otherGroup.removeAt(matchingIndex)
+            when {
+                thisGroup.isEmpty() -> secondOnly.addAll(otherGroup)
+                otherGroup.isEmpty() -> firstOnly.addAll(thisGroup)
+                thisGroup.size == 1 && otherGroup.size == 1 -> {
+                    // match, do nothing
                 }
-            }
 
-            // Remaining elements in otherGroup are unique to other
-            secondOnly.addAll(otherGroup)
+                else -> {
+                    val thisGroupCopy = thisGroup.toMutableList()
+                    val otherGroupCopy = otherGroup.toMutableList()
+                    thisGroupCopy.forEach { thisElement ->
+                        val matchingIndex = otherGroupCopy.indexOfFirst { equality(thisElement, it) }
+                        if (matchingIndex == -1) {
+                            firstOnly.add(thisElement)
+                        } else {
+                            otherGroupCopy.removeAt(matchingIndex)
+                        }
+                    }
+
+                    // Remaining elements in otherGroup are unique to other
+                    secondOnly.addAll(otherGroupCopy)
+                }
+
+            }
         }
 
         return Pair(firstOnly, secondOnly)
     }
 
-    fun contains(element: T): Boolean {
-        val group = elementGroups[hash(element)] ?: return false
-        return group.any { equality(it, element) }
-    }
+    fun contains(element: T): Boolean = elementGroups[hash(element)] != null
 
     fun count(element: T): Int {
-        val group = elementGroups[hash(element)] ?: return 0
-        return group.count { equality(it, element) }
+        val group = elementGroups[hash(element)]
+
+        return when {
+            group == null -> 0
+            group.size == 1 -> 1
+            else -> group.count { equality(it, element) }
+        }
     }
 
     protected open fun copyElementGroups(): Map<Int, MutableList<T>> {

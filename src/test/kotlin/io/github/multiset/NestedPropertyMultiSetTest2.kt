@@ -378,8 +378,8 @@ class NestedPropertyMultiSetTest2 {
 
         val (firstOnly, secondOnly) = multiSet1.symmetricDifference(multiSet2)
 
-        assertEquals(setOf(person1), firstOnly)
-        assertEquals(setOf(person3, person4), secondOnly)
+        assertEquals(listOf(person1), firstOnly)
+        assertEquals(listOf(person3, person4), secondOnly)
     }
 
     @Test
@@ -406,8 +406,8 @@ class NestedPropertyMultiSetTest2 {
 
         val (firstOnly, secondOnly) = multiSet1.symmetricDifference(multiSet2)
 
-        assertEquals(setOf(person1, person3), firstOnly)
-        assertEquals(setOf(person2), secondOnly)
+        assertEquals(listOf(person1, person3), firstOnly)
+        assertEquals(listOf(person2), secondOnly)
     }
 
     @Test
@@ -423,7 +423,7 @@ class NestedPropertyMultiSetTest2 {
 
         val (firstOnly, secondOnly) = multiSet1.symmetricDifference(multiSet2)
 
-        assertEquals(setOf(person1), firstOnly)
+        assertEquals(listOf(person1), firstOnly)
         assertTrue(secondOnly.isEmpty())
     }
 
@@ -472,7 +472,7 @@ class NestedPropertyMultiSetTest2 {
         val multiSet2 = listOf(person1).toMultiSet(properties)
 
         val logs = mutableListOf<String>()
-        val result = multiSet1.differenceWithLogging(multiSet2) { logs.add(it) }
+        val result = multiSet1.difference(multiSet2) { logs.add(it) }
 
         assertEquals(listOf(person2, person3), result)
         assertEquals(2, logs.size)
@@ -498,7 +498,7 @@ class NestedPropertyMultiSetTest2 {
         val multiSet2 = listOf(person2).toMultiSet(personProperties)
 
         val logs = mutableListOf<String>()
-        val result = multiSet1.differenceWithLogging(multiSet2) { logs.add(it) }
+        val result = multiSet1.difference(multiSet2) { logs.add(it) }
 
         assertEquals(listOf(person1, person3), result) 
         assertEquals(2, logs.size)
@@ -527,7 +527,7 @@ class NestedPropertyMultiSetTest2 {
         val multiSet2 = listOf(person2).toMultiSet(personProperties)
 
         val logs = mutableListOf<String>()
-        val result = multiSet1.differenceWithLogging(multiSet2) { logs.add(it) }
+        val result = multiSet1.difference(multiSet2) { logs.add(it) }
 
         assertEquals(listOf(person1, person3), result) 
         assertEquals(2, logs.size)
@@ -547,7 +547,7 @@ class NestedPropertyMultiSetTest2 {
         val multiSet2 = emptyList<Person>().toMultiSet(personProperties)
 
         val logs = mutableListOf<String>()
-        val result = multiSet1.differenceWithLogging(multiSet2) { logs.add(it) }
+        val result = multiSet1.difference(multiSet2) { logs.add(it) }
 
         assertEquals(listOf(person1), result)
         assertTrue(logs.isEmpty()) // No comparisons made since other multiset is empty
