@@ -18,7 +18,18 @@ A Kotlin library for working with multisets (bags) that allows comparing complex
 ## Installation
 
 Add the following to your `build.gradle.kts`:
-kotlin dependencies { implementation("io.github:multiset:1.0.0") }
+```kotlin 
+repositories {
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
+dependencies {
+    implementation("com.github.shme7ev:kotlin-multiset:master-SNAPSHOT")
+}
+```
+
+[![](https://jitpack.io/v/shme7ev/kotlin-multiset.svg)](https://jitpack.io/#shme7ev/kotlin-multiset)
 
 
 ## Usage
