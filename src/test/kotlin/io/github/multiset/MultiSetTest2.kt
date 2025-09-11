@@ -1,10 +1,10 @@
 package io.github.multiset
 
-import io.github.multiset.NestedPropertyMultiSet.Companion.toMultiSet
+import io.github.multiset.PropertyBasedMultiSet.Companion.toMultiSet
 import org.junit.Assert.*
 import org.junit.Test
 
-class NestedPropertyMultiSetTest {
+class MultiSetTest2 {
     data class Department(val name: String, val code: Int)
     data class Address1(val street: String, val city: String)
     data class Person1(
@@ -15,48 +15,12 @@ class NestedPropertyMultiSetTest {
     )
 
     @Test
-    fun testNestedMultiSetWithAddressType() {
-        val address1 = Address1("123 Main St", "Springfield")
-        val address2 = Address1("123 Main St", "Springfield")
-        val person1 = Person1("Alice", 25, address1)
-        val person2 = Person1("Alice", 25, address2)
-
-        val addressProperties = listOf(Address1::street, Address1::city)
-        val personProperties = listOf(Person1::name, Person1::age, Person1::address)
-
-        val multiSet1 = listOf(person1).toMultiSet(personProperties)
-        val multiSet2 = listOf(person2).toMultiSet(personProperties)
-
-        assertTrue(multiSet1.elementsEquals(multiSet2))
-        assertEquals(multiSet1.contentHashCode(), multiSet2.contentHashCode())
-    }
-
-    @Test
-    fun testNestedMultiSetWithDepartmentType() {
-        val dept1 = Department("Engineering", 101)
-        val dept2 = Department("Engineering", 101)
-        val person1 = Person1("Alice", 25, department = dept1)
-        val person2 = Person1("Alice", 25, department = dept2)
-
-        val deptProperties = listOf(Department::name, Department::code)
-        val personProperties = listOf(Person1::name, Person1::age, Person1::department)
-
-        val multiSet1 = listOf(person1).toMultiSet(personProperties)
-        val multiSet2 = listOf(person2).toMultiSet(personProperties)
-
-        assertTrue(multiSet1.elementsEquals(multiSet2))
-        assertEquals(multiSet1.contentHashCode(), multiSet2.contentHashCode())
-    }
-
-    @Test
     fun testNestedMultiSetWithDifferentTypesInequality() {
         val address1 = Address1("123 Main St", "Springfield")
         val dept1 = Department("Engineering", 101)
         val person1 = Person1("Alice", 25, address1)
         val person2 = Person1("Alice", 25, department = dept1)
 
-        val addressProperties = listOf(Address1::street, Address1::city)
-        val deptProperties = listOf(Department::name, Department::code)
         val personProperties1 = listOf(Person1::name, Person1::age, Person1::address)
         val personProperties2 = listOf(Person1::name, Person1::age, Person1::department)
 
@@ -75,8 +39,6 @@ class NestedPropertyMultiSetTest {
         val person1 = Person1("Alice", 25, address1, dept1)
         val person2 = Person1("Alice", 25, address2, dept2)
 
-        val addressProperties = listOf(Address1::street, Address1::city)
-        val deptProperties = listOf(Department::name, Department::code)
         val personProperties = listOf(Person1::name, Person1::age, Person1::address, Person1::department)
 
         val multiSet1 = listOf(person1).toMultiSet(personProperties)
@@ -96,8 +58,6 @@ class NestedPropertyMultiSetTest {
         val addressProperties1 = listOf(Address1::street, Address1::city)
         val personProperties = listOf(Person1::name, Person1::age, Person1::address)
 
-        val multiSet1 = listOf(person1).toMultiSet(personProperties)
-        val multiSet2 = listOf(person2).toMultiSet(personProperties)
 
         // Override the nested multisets with different properties
         val nestedMultiSet1 = listOf(address1).toMultiSet(addressProperties1)

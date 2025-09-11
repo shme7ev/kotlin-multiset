@@ -1,9 +1,9 @@
 package io.github.multiset
 
+import io.github.multiset.PropertyBasedMultiSet.Companion.toMultiSet
 import org.junit.Assert.*
 import org.junit.Test
 import kotlin.reflect.KProperty1
-import io.github.multiset.NestedPropertyMultiSet.Companion.toMultiSet
 
 class HashCollisionTest {
 

@@ -5,7 +5,8 @@ import kotlin.reflect.KProperty1
 
 open class PropertyBasedMultiSet<T : Any>(
     val elements: List<T>,
-    protected val properties: List<KProperty1<T, *>>,
+    private val properties: List<KProperty1<T, *>>,
+    private val multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
 ) {
 
     private val elementGroups by lazy { elements.groupBy { hash(it) } }
@@ -13,7 +14,37 @@ open class PropertyBasedMultiSet<T : Any>(
     private val propertyNames by lazy { properties.map { it.name } }
 
     protected open fun equality(a: T, b: T): Boolean =
-        properties.all { prop -> propertyCompare(prop.get(a), prop.get(b)) }
+        properties.all { prop ->
+            val aValue = prop.get(a)
+            val bValue = prop.get(b)
+            when {
+                aValue == null && bValue == null -> true
+                aValue == null || bValue == null -> false
+                multisetProperties.containsKey(prop) -> {
+                    val elementProperties = multisetProperties[prop]
+                    if (elementProperties != null) {
+                        val aList = aValue as? List<*>
+                        val bList = bValue as? List<*>
+                        when {
+                            aList == null && bList == null -> true
+                            aList == null || bList == null -> false
+                            else -> {
+                                @Suppress("UNCHECKED_CAST")
+                                val aMultiSet = PropertyBasedMultiSet(
+                                    aList.filterNotNull(),
+                                    elementProperties as List<KProperty1<Any, *>>
+                                )
+                                val bMultiSet = PropertyBasedMultiSet(bList.filterNotNull(), elementProperties)
+                                aMultiSet.elementsEquals(bMultiSet)
+                            }
+                        }
+                    } else aValue == bValue
+                }
+
+                aValue is BigDecimal && bValue is BigDecimal -> aValue.compareTo(bValue) == 0
+                else -> aValue == bValue
+            }
+        }
 
     private fun propertyCompare(aValue: Any?, bValue: Any?) = when {
         aValue is BigDecimal && bValue is BigDecimal -> aValue.compareTo(bValue) == 0
@@ -21,13 +52,67 @@ open class PropertyBasedMultiSet<T : Any>(
     }
 
     private fun ((String) -> Unit).logDifferences(element: T, otherElement: T) {
-        properties
+        val mainDifferences = properties
             .filter { prop -> !propertyCompare(prop.get(element), prop.get(otherElement)) }
-            .joinToString(", ") { prop ->
+            .joinToString(separator = "\n", prefix = "\n") { prop ->
                 "${prop.name}: ${prop.get(element)} != ${prop.get(otherElement)}"
-            }.takeIf { it.isNotEmpty() }?.let {
-                this("No match for $element in other multiset, differences with $otherElement: $it")
             }
+
+        val nestedDifferences = properties
+            .filter { prop -> multisetProperties.containsKey(prop) }
+            .joinToString(separator = "\n", prefix = "\n") { prop ->
+                val aValue = prop.get(element)
+                val bValue = prop.get(otherElement)
+                if (aValue != bValue) {
+                    val elementProperties = multisetProperties[prop]
+                    if (elementProperties != null) {
+                        val aList = aValue as? List<*>
+                        val bList = bValue as? List<*>
+                        when {
+                            aList == null && bList == null -> {
+                                // Both null, no difference to log
+                                ""
+                            }
+
+                            aList == null || bList == null -> {
+                                "No match for $element in other multiset, differences with $otherElement: ${prop.name}: one is null, other is $aValue vs $bValue"
+                            }
+
+                            aList.size != bList.size -> {
+                                "List sizes are different ${aList.size} ${bList.size}"
+                            }
+
+                            else -> {
+
+                                var diffs = ""
+
+                                aList.forEach { nestedElement1 ->
+                                    bList.forEach { nestedElement2 ->
+                                        @Suppress("UNCHECKED_CAST")
+                                        diffs += (elementProperties as List<KProperty1<Any, *>>).filter { nestedProp ->
+                                            !propertyCompare(
+                                                nestedProp.get(nestedElement1 as Any),
+                                                nestedProp.get(nestedElement2 as Any)
+                                            )
+                                        }.joinToString(separator = "\n") { nestedProp ->
+                                            "${nestedProp.name}: ${nestedProp.get(nestedElement1 as Any)} != ${
+                                                nestedProp.get(
+                                                    nestedElement2 as Any
+                                                )
+                                            }"
+                                        }
+                                    }
+                                }
+                                diffs
+                            }
+                        }
+                    } else ""
+                } else ""
+            }
+
+        (mainDifferences + nestedDifferences).takeIf { it.isNotEmpty() }?.let {
+            this("No match for $element in other multiset, differences with $otherElement: $it")
+        }
     }
 
     protected open fun hash(element: T): Int =
@@ -35,9 +120,32 @@ open class PropertyBasedMultiSet<T : Any>(
             val value = prop.get(element)
             31 * acc + when (value) {
                 is BigDecimal -> value.stripTrailingZeros().hashCode()
-                else -> value?.hashCode() ?: 0
+                else -> {
+                    if (multisetProperties.containsKey(prop)) {
+                        val elementProperties = multisetProperties[prop]
+                        if (elementProperties != null) {
+                            val list = value as? List<*>
+                            if (list != null) {
+                                @Suppress("UNCHECKED_CAST")
+                                val multiSet = PropertyBasedMultiSet(
+                                    list.filterNotNull(),
+                                    elementProperties as List<KProperty1<Any, *>>
+                                )
+                                multiSet.contentHashCode()
+                            } else {
+                                value?.hashCode() ?: 0
+                            }
+                        } else {
+                            value?.hashCode() ?: 0
+                        }
+                    } else {
+                        value?.hashCode() ?: 0
+                    }
+                }
             }
         }
+
+    fun contentHashCode(): Int = elements.fold(0) { acc, element -> 31 * acc + hash(element) }
 
     fun intersect(other: PropertyBasedMultiSet<T>): List<T> {
         require(this.propertyNames == other.propertyNames) {
@@ -68,6 +176,18 @@ open class PropertyBasedMultiSet<T : Any>(
         return result
     }
 
+    /**
+     * Computes the difference between this multiset and another multiset
+     *
+     * This function finds elements that exist in this multiset but not in the other multiset.
+     * It uses hash values and equality comparisons to determine if elements exist in both sets.
+     *
+     * @param other The other multiset to compute difference with
+     * @param logger Optional logger function to record information about element differences
+     * CAUTION: PASSING LOGGER WILL TURN THIS INTO O(N*M) !!!
+     * @return A list of elements that exist in this multiset but not in the other
+     * @throws IllegalArgumentException If the two multisets don't have the same property comparators
+     */
     fun difference(other: PropertyBasedMultiSet<T>, logger: ((String) -> Unit)? = null): List<T> {
         elements
         require(this.propertyNames == other.propertyNames) {
@@ -79,12 +199,11 @@ open class PropertyBasedMultiSet<T : Any>(
         elementGroups.forEach { (hash, hashGroup) ->
             val otherHashGroup = other.elementGroups[hash]
             if (otherHashGroup == null) {
+                // Current hash group doesn't exist in the other set, add all elements to result
                 resultElements.addAll(hashGroup)
                 logger?.run {
                     hashGroup.forEach { element ->
-                        other.elements.forEach { otherElement ->
-                            logDifferences(element, otherElement)
-                        }
+                        other.elements.forEach { otherElement -> logDifferences(element, otherElement) }
                     }
                 }
             } else {
@@ -180,6 +299,68 @@ open class PropertyBasedMultiSet<T : Any>(
         return Pair(firstOnly, secondOnly)
     }
 
+    fun elementsEquals(other: PropertyBasedMultiSet<T>, logger: ((String) -> Unit)? = null): Boolean {
+        if (this.elements.size != other.elements.size) {
+            logger?.let { it ->
+                it("No match for $this vs $other - sizes are different: ${this.elements.size} ${other.elements.size}")
+            }
+            return false
+        }
+
+        if (elementGroups.size != other.elementGroups.size) {
+            logger?.let { it ->
+                this.elements.forEach { element ->
+                    other.elements.forEach { otherElement -> it.logDifferences(element, otherElement) }
+                }
+            }
+            return false
+        }
+
+        for ((hashCode, thisGroup) in elementGroups) {
+            val otherGroup = other.elementGroups[hashCode] ?: run {
+                logger?.run {
+                    thisGroup.forEach { element ->
+                        other.elements.forEach { otherElement -> logDifferences(element, otherElement) }
+                    }
+                }
+                return false
+            }
+
+            if (thisGroup.size != otherGroup.size) {
+                logger?.run {
+                    thisGroup.forEach { element ->
+                        other.elements.forEach { otherElement -> logDifferences(element, otherElement) }
+                    }
+                }
+                return false
+            }
+
+            // If both groups have size 1, no need for further equality checks
+            if (thisGroup.size == 1) continue
+
+            // For larger groups, we need to check element equality
+            val otherGroupCopy = otherGroup.toMutableList()
+
+            for (element in thisGroup) {
+                val matchingIndex = otherGroupCopy.indexOfFirst { otherElement ->
+                    equality(element, otherElement)
+                }
+
+                if (matchingIndex == -1) {
+                    logger?.run {
+                        otherGroupCopy.forEachIndexed { index, otherElement ->
+                            if (index != matchingIndex) logDifferences(element, otherElement)
+                        }
+                    }
+                    return false
+                }
+                otherGroupCopy.removeAt(matchingIndex)
+            }
+        }
+
+        return true
+    }
+
     fun contains(element: T): Boolean = elementGroups[hash(element)] != null
 
     fun count(element: T): Int {
@@ -197,4 +378,31 @@ open class PropertyBasedMultiSet<T : Any>(
     }
 
     override fun toString(): String = "PropertyBasedMultiSet(elements=$elements)"
+
+    companion object {
+        fun <T : Any> List<T>.toMultiSet(
+            properties: List<KProperty1<T, *>>,
+            multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
+        ): PropertyBasedMultiSet<T> {
+            require(properties.isNotEmpty()) { "At least one property must be specified" }
+            return PropertyBasedMultiSet(this, properties.toList(), multisetProperties)
+        }
+
+        fun <T : Any> List<T>.difference(
+            other: List<T>,
+            properties: List<KProperty1<T, *>>,
+            multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
+            logger: ((String) -> Unit)? = null,
+        ) = toMultiSet(properties, multisetProperties).difference(
+            other.toMultiSet(properties, multisetProperties),
+            logger
+        )
+
+        fun <T : Any> List<T>.match(
+            other: List<T>, properties: List<KProperty1<T, *>>,
+            multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
+            logger: ((String) -> Unit)? = null,
+        ) = toMultiSet(properties, multisetProperties).elementsEquals(other.toMultiSet(properties, multisetProperties), logger)
+
+    }
 }

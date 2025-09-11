@@ -1,9 +1,10 @@
 package io.github.multiset
 
+import io.github.multiset.PropertyBasedMultiSet.Companion.toMultiSet
 import org.junit.Assert.*
 import org.junit.Test
 
-class NestedPropertyMultiSetTest3 {
+class MultiSetTest4 {
 
     data class Department(val name: String, val code: Int)
     data class Address(val street: String, val city: String)
@@ -143,7 +144,7 @@ class NestedPropertyMultiSetTest3 {
 
     @Test
     fun testCountWithEmptySet() {
-        val multiSet = PropertyBasedMultiSet(emptyList<Person>(), properties)
+        val multiSet = PropertyBasedMultiSet(emptyList(), properties)
 
         assertEquals(0, multiSet.count(Person("Alice", 25)))
     }
@@ -159,8 +160,8 @@ class NestedPropertyMultiSetTest3 {
         val addressProperties = listOf(Address::street, Address::city)
         val personProperties = listOf(Person::name, Person::age, Person::address)
 
-        val multiSet1 = NestedPropertyMultiSet(listOf(person1, person2), personProperties)
-        val multiSet2 = NestedPropertyMultiSet(listOf(person2, person3), personProperties)
+        val multiSet1 = PropertyBasedMultiSet(listOf(person1, person2), personProperties, mapOf(Person::address to addressProperties ))
+        val multiSet2 = PropertyBasedMultiSet(listOf(person2, person3), personProperties, mapOf(Person::address to addressProperties ))
 
         val result = multiSet1.intersect(multiSet2)
 
@@ -177,10 +178,12 @@ class NestedPropertyMultiSetTest3 {
         val person2 = Person("Bob", 30, address2)
         val person3 = Person("Charlie", 35, address1)
 
+        val addressProperties = listOf(Address::street, Address::city)
+
         val personProperties = listOf(Person::name, Person::age, Person::address)
 
-        val multiSet1 = NestedPropertyMultiSet(listOf(person1, person2, person3), personProperties)
-        val multiSet2 = NestedPropertyMultiSet(listOf(person1, person2), personProperties)
+        val multiSet1 = listOf(person1, person2, person3).toMultiSet( personProperties, mapOf(Person::address to addressProperties ))
+        val multiSet2 = listOf(person1, person2).toMultiSet( personProperties, mapOf(Person::address to addressProperties ))
 
         val result = multiSet1.difference(multiSet2)
 
