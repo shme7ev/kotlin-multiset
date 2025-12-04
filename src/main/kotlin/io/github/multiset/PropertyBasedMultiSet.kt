@@ -84,7 +84,7 @@ open class PropertyBasedMultiSet<T : Any>(
 
                             else -> {
 
-                                var diffs = ""
+                                var diffs = "\n"
 
                                 aList.forEach { nestedElement1 ->
                                     bList.forEach { nestedElement2 ->
@@ -398,7 +398,24 @@ open class PropertyBasedMultiSet<T : Any>(
             logger
         )
 
-        fun <T : Any> List<T>.match(
+        fun <T : Any> List<T>.matchElements(
+            other: List<T>,
+            properties: List<KProperty1<T, *>>,
+            multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
+        ) = toMultiSet(properties, multisetProperties).matchElements(
+            other.toMultiSet(properties, multisetProperties)
+        )
+
+        fun <T : Any> List<T>.symmetricDifference(
+            other: List<T>,
+            properties: List<KProperty1<T, *>>,
+            multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
+            logger: ((String) -> Unit)? = null,
+        ) = toMultiSet(properties, multisetProperties).symmetricDifference(
+            other.toMultiSet(properties, multisetProperties),
+        )
+
+        fun <T : Any> List<T>.matchLists(
             other: List<T>, properties: List<KProperty1<T, *>>,
             multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
             logger: ((String) -> Unit)? = null,
