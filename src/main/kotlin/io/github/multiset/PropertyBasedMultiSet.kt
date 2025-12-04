@@ -84,7 +84,7 @@ open class PropertyBasedMultiSet<T : Any>(
 
                             else -> {
 
-                                var diffs = "\n"
+                                var diffs = ""
 
                                 aList.forEach { nestedElement1 ->
                                     bList.forEach { nestedElement2 ->
@@ -94,7 +94,7 @@ open class PropertyBasedMultiSet<T : Any>(
                                                 nestedProp.get(nestedElement1 as Any),
                                                 nestedProp.get(nestedElement2 as Any)
                                             )
-                                        }.joinToString(separator = "\n") { nestedProp ->
+                                        }.joinToString(prefix = "\n", separator = "\n") { nestedProp ->
                                             "${nestedProp.name}: ${nestedProp.get(nestedElement1 as Any)} != ${
                                                 nestedProp.get(
                                                     nestedElement2 as Any
@@ -145,7 +145,7 @@ open class PropertyBasedMultiSet<T : Any>(
             }
         }
 
-    fun contentHashCode(): Int = elements.fold(0) { acc, element -> 31 * acc + hash(element) }
+    fun contentHashCode(): Int = elements.map(::hash).sorted().fold(1) { acc, h -> 31 * acc + h }
 
     fun intersect(other: PropertyBasedMultiSet<T>): List<T> {
         require(this.propertyNames == other.propertyNames) {
@@ -242,6 +242,7 @@ open class PropertyBasedMultiSet<T : Any>(
 
         elementGroups.forEach { (hash, group) ->
             otherCopy[hash]?.let { otherGroup ->
+//                Since the hash is the same and there's only one element in each group, they're considered to match without further verification
                 if (group.size == 1 && otherGroup.size == 1) result[group.first()] = otherGroup
                 else {
                     // hash collision, have to compare by equality
@@ -398,6 +399,14 @@ open class PropertyBasedMultiSet<T : Any>(
             logger
         )
 
+        fun <T : Any> List<T>.intersect(
+            other: List<T>,
+            properties: List<KProperty1<T, *>>,
+            multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
+        ) = toMultiSet(properties, multisetProperties).intersect(
+            other.toMultiSet(properties, multisetProperties),
+        )
+
         fun <T : Any> List<T>.matchElements(
             other: List<T>,
             properties: List<KProperty1<T, *>>,
@@ -419,7 +428,10 @@ open class PropertyBasedMultiSet<T : Any>(
             other: List<T>, properties: List<KProperty1<T, *>>,
             multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
             logger: ((String) -> Unit)? = null,
-        ) = toMultiSet(properties, multisetProperties).elementsEquals(other.toMultiSet(properties, multisetProperties), logger)
+        ) = toMultiSet(properties, multisetProperties).elementsEquals(
+            other.toMultiSet(properties, multisetProperties),
+            logger
+        )
 
     }
 }
