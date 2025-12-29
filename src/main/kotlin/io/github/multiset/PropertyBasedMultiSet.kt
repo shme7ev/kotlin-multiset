@@ -11,7 +11,7 @@ open class PropertyBasedMultiSet<T : Any>(
 
     private val elementGroups by lazy { elements.groupBy { hash(it) } }
 
-    private val propertyNames by lazy { properties.map { it.name } }
+//    private val propertyNames by lazy { properties.map { it.name } }
 
     protected open fun equality(a: T, b: T): Boolean =
         properties.all { prop ->
@@ -148,9 +148,6 @@ open class PropertyBasedMultiSet<T : Any>(
     fun contentHashCode(): Int = elements.map(::hash).sorted().fold(1) { acc, h -> 31 * acc + h }
 
     fun intersect(other: PropertyBasedMultiSet<T>): List<T> {
-        require(this.propertyNames == other.propertyNames) {
-            "Can only intersect MultiSets with the same property comparisons"
-        }
 
         val result = mutableListOf<T>()
 
@@ -189,10 +186,6 @@ open class PropertyBasedMultiSet<T : Any>(
      * @throws IllegalArgumentException If the two multisets don't have the same property comparators
      */
     fun difference(other: PropertyBasedMultiSet<T>, logger: ((String) -> Unit)? = null): List<T> {
-        elements
-        require(this.propertyNames == other.propertyNames) {
-            "Can only calculate difference between MultiSets with the same property comparisons"
-        }
 
         val resultElements = mutableListOf<T>()
 
@@ -232,10 +225,17 @@ open class PropertyBasedMultiSet<T : Any>(
         return resultElements
     }
 
+    /**
+     * Matches elements between this multiset and another multiset based on hash values and equality comparisons.
+     *
+     * This function creates a mapping between elements in this multiset and matching elements in the other multiset.
+     * Elements are considered matching if they have the same hash value and are equal according to the equality function.
+     *
+     * @param other The other multiset to match elements with
+     * @return A map where keys are elements from this multiset and values are lists of matching elements from the other multiset
+     * @throws IllegalArgumentException If the two multisets don't have the same property comparators
+     */
     fun matchElements(other: PropertyBasedMultiSet<T>): Map<T, List<T>> {
-        require(this.propertyNames == other.propertyNames) {
-            "Can only match elements between MultiSets with the same property comparisons"
-        }
 
         val result = mutableMapOf<T, List<T>>()
         val otherCopy = other.copyElementGroups()
@@ -257,9 +257,6 @@ open class PropertyBasedMultiSet<T : Any>(
     }
 
     fun symmetricDifference(other: PropertyBasedMultiSet<T>): Pair<List<T>, List<T>> {
-        require(this.propertyNames == other.propertyNames) {
-            "Can only calculate symmetric difference between MultiSets with the same property comparisons"
-        }
 
         val firstOnly = mutableListOf<T>()
         val secondOnly = mutableListOf<T>()
@@ -394,44 +391,60 @@ open class PropertyBasedMultiSet<T : Any>(
             properties: List<KProperty1<T, *>>,
             multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
             logger: ((String) -> Unit)? = null,
-        ) = toMultiSet(properties, multisetProperties).difference(
-            other.toMultiSet(properties, multisetProperties),
-            logger
-        )
+        ) = when {
+            this.isEmpty() -> emptyList()
+            other.isEmpty() -> this
+            else -> toMultiSet(properties, multisetProperties).difference(
+                other.toMultiSet(properties, multisetProperties), logger
+            )
+        }
 
         fun <T : Any> List<T>.intersect(
             other: List<T>,
             properties: List<KProperty1<T, *>>,
             multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
-        ) = toMultiSet(properties, multisetProperties).intersect(
-            other.toMultiSet(properties, multisetProperties),
-        )
+        ) = when {
+            this.isEmpty() || other.isEmpty() -> emptyList()
+            else -> toMultiSet(properties, multisetProperties).intersect(
+                other.toMultiSet(properties, multisetProperties),
+            )
+        }
 
         fun <T : Any> List<T>.matchElements(
             other: List<T>,
             properties: List<KProperty1<T, *>>,
             multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
-        ) = toMultiSet(properties, multisetProperties).matchElements(
-            other.toMultiSet(properties, multisetProperties)
-        )
+        ): Map<T, List<T>> = when {
+            this.isEmpty() || other.isEmpty() -> emptyMap()
+            else -> toMultiSet(properties, multisetProperties).matchElements(
+                other.toMultiSet(properties, multisetProperties)
+            )
+        }
 
         fun <T : Any> List<T>.symmetricDifference(
             other: List<T>,
             properties: List<KProperty1<T, *>>,
             multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
             logger: ((String) -> Unit)? = null,
-        ) = toMultiSet(properties, multisetProperties).symmetricDifference(
-            other.toMultiSet(properties, multisetProperties),
-        )
+        ): Pair<List<T>, List<T>> = when {
+            this.isEmpty() || other.isEmpty() -> this to other
+            else -> toMultiSet(properties, multisetProperties).symmetricDifference(
+                other.toMultiSet(properties, multisetProperties),
+            )
+        }
 
         fun <T : Any> List<T>.matchLists(
             other: List<T>, properties: List<KProperty1<T, *>>,
             multisetProperties: Map<KProperty1<T, *>, List<KProperty1<*, *>>> = emptyMap(),
             logger: ((String) -> Unit)? = null,
-        ) = toMultiSet(properties, multisetProperties).elementsEquals(
-            other.toMultiSet(properties, multisetProperties),
-            logger
-        )
+        ): Boolean = when {
+            this.isEmpty() && other.isEmpty() -> true
+            this.isEmpty() || other.isEmpty() -> false
+            else -> toMultiSet(properties, multisetProperties).elementsEquals(
+                other.toMultiSet(properties, multisetProperties),
+                logger
+            )
+        }
 
     }
 }
